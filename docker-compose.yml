@@ -1,0 +1,65 @@
+services:
+  analyzer:
+    build:
+      context: ./services/analyzer
+      dockerfile: Dockerfile
+    ports:
+      - "${ANALYZER_PORT:-8001}:8001"
+    environment:
+      - ANALYZER_HOST=0.0.0.0
+      - ANALYZER_PORT=8001
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  gateway:
+    build:
+      context: ./services/gateway
+      dockerfile: Dockerfile
+    ports:
+      - "${GATEWAY_PORT:-8002}:8002"
+    environment:
+      - GATEWAY_HOST=0.0.0.0
+      - GATEWAY_PORT=8002
+      - ANALYZER_URL=http://analyzer:8001
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    depends_on:
+      analyzer:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8002/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+
+  dashboard:
+    build:
+      context: ./services/dashboard
+      dockerfile: Dockerfile
+    ports:
+      - "${DASHBOARD_PORT:-8003}:8003"
+    environment:
+      - DASHBOARD_HOST=0.0.0.0
+      - DASHBOARD_PORT=8003
+      - ANALYZER_URL=http://analyzer:8001
+      - GATEWAY_URL=http://gateway:8002
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    depends_on:
+      analyzer:
+        condition: service_healthy
+      gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8003/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
